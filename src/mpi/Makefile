@@ -3,7 +3,7 @@ SRC = ../
 SEQ_DIR =./
 MPI_DIR =./
 
-FSWITCHES = -Ofast -fopenmp -fbackslash -ffree-line-length-512 -fallow-argument-mismatch # release - linux (cluster)
+FSWITCHES = -O3 -fopenmp -fbackslash -ffree-line-length-512 -fallow-argument-mismatch # release - linux (cluster)
 # FSWITCHES = -O -Wall -Wtabs -g -fopenmp -ffree-line-length-512 -fallow-argument-mismatch # debug - linux
 
 CSWITCHES = -O -DLINUX -I/usr/X11R6/include -L/usr/X11R6/lib
