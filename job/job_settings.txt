@@ -1,0 +1,42 @@
+ ======================================================
+ =====================JOB SETTINGS=====================
+ ======================================================
+ job_name: "job"
+ lambda:   0.53200000524520874     
+ refractive index real:    1.3099999427795410     
+ refractive index imag:    0.0000000000000000     
+ max beam recursions:                     8
+ max total internal reflections:                    10
+ rotation method: "none"
+ no. of orientations:                     1
+ multithreading: enabled
+ particle input method:"cc_hex"
+ rotation method: none
+ gaussian random particle parameters...
+ 1) L:    20.000000000000000     
+ 2) hexagon edge length:    10.000000000000000     
+ 3) no. facets per hex. edge:            4
+ 4) prism edge length:    10.000000000000000     
+ 5) no. facets per prism edge:           4
+ 6) no. rotations at prism-basal intersections:            1
+ 7) no. rotations at prism-prism intersections:            2
+ 8) no. roughness scales:            1
+ correlation length 1:       1.00000000
+ standard deviation 1:       0.00000000
+ suppress 2d output: no
+ automatic triangulation: disabled
+ time limit: none
+ resuming a cached job: no
+ diffraction energy scaling: disabled
+ debugging level:                     1
+ timing: disabled
+ minimum area needed for new beam propagation:   0.10000000000000001     
+ minumum energy needed for new beam propagation:    1.0000000000000000E-004
+ beam exporting: disabled
+ fast diffraction: disabled
+ speed/memory priority: speed
+ output directory: "job/"
+ temporary files directory: "job/tmp/"
+ ======================================================
+ ======================================================
+ ======================================================

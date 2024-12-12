@@ -1747,6 +1747,7 @@ subroutine PROT_MPI(alpha_vals,         & ! list of values for euler alpha angle
 
     if(rot_method(1:len(trim(rot_method))) .eq. 'none') then
         ! do nothing
+        verts_rot = geometry%v
     else if(rot_method(1:len(trim(rot_method))) .eq. 'off') then
         ! call read_input_vals(ifn,"rot off",offs,2)
         ! print*,'off values: ', offs(1:2)
@@ -2072,6 +2073,39 @@ end do
 close(10)
 
 ! print*,'========== end sr readApertures'
+
+end subroutine
+
+subroutine read_apertures(afn,geometry)
+
+    character(100), intent(in) :: afn ! crystal filename
+    type(geometry_type), intent(inout) :: geometry
+
+    integer(8) i, io ! counting variables
+    integer(8) num_lines
+
+    num_lines = 0
+    print*,'opening apertures file:',afn
+    open(unit = 10, file = afn, status = 'old')
+    do  ! scan through the lines in the crystal file...
+        read(10,"(a)",iostat=io)
+        if (io/=0) exit
+        num_lines = num_lines + 1
+    end do
+
+    if(num_lines .ne. geometry%nf) then
+        print*,'number of lines in aperture file did not match number of faces. exiting...'
+        print*,'num faces:',geometry%nf
+        print*,'num_lines:',num_lines
+        stop
+    end if
+
+    rewind(10)
+    do  i = 1,num_lines ! read aperture from file
+        read(10,*) geometry%f(i)%ap
+    end do
+
+close(10)
 
 end subroutine
 
@@ -2433,7 +2467,7 @@ subroutine PDAL2(   job_params,     &
     type(job_parameters_type), intent(inout) :: job_params ! parameters for C. Collier Gaussian Random hexagonal columns/plates
     type(geometry_type), intent(out) :: geometry ! the particle geometry data structure
 
-    integer(8), parameter :: num_face_vert_max_in = 24 ! max number of vertices per face
+    integer(8), parameter :: num_face_vert_max_in = 50 ! max number of vertices per face
     integer(8), parameter :: max_line_length = 1000 ! max number of characters in a line of thecrystal file (might need increasing if faces have many vertices)
     character(max_line_length) line ! a line in a file
     integer(8) face_string_length
@@ -2497,181 +2531,7 @@ subroutine PDAL2(   job_params,     &
 
         if (trim(cft) .eq. 'obj') then
 
-            face_string_length = 0
-            is_current_char_slash = .false.
-            entry_count = 0
-            ! has_end_of_line_reached = .true.
-            j = 1 ! reset counting variable
-            k = 1 ! reset counting variable
-            m = 1 ! reset counting variable
-            num_vert = 0 ! rest number of unique vertices
-            num_face = 0 ! rest number of faces
-            num_norm = 0 ! rest number of face normals
-            
-            open(unit = 10, file = cfn, status = 'old')
-            
-            do  ! scan through the lines in the crystal file...
-                read(10,"(a)",iostat=io)line
-                if (io/=0) exit
-                !do i = 1, len(line)
-                    !if (line(i:i) == "/") line(i:i) = " "   ! replace "/" with " "
-                !enddo
-                if (line(1:2) .eq. 'v ') then 
-                    num_vert = num_vert + 1 ! count the number of unique vertices
-                else if (line(1:2) .eq. 'vn') then
-                    num_norm = num_norm + 1 ! count the number of unique normals
-                else if (line(1:2) .eq. 'f ') then
-                    num_face = num_face + 1 ! count the number of faces
-                end if
-            end do
-            
-            rewind(10)
-            
-            ! allocate and init
-            allocate(verts(num_vert,3)) ! allocate an array for the crystal vertex coorindates
-            allocate(num_face_vert(num_face)) ! allocate array for the number of vertices in each face
-            allocate(norm_ids(num_face)) ! allocate array for the face normal ID of each face
-            allocate(face_ids_temp(num_face,num_face_vert_max_in)) ! allocate an array for the vertex IDs in each face
-            allocate(norms(num_norm,3)) ! allocate an array for the face normals
-            verts = 0
-            num_face_vert = 0
-            norm_ids = 0
-            face_ids_temp = 0
-            norms = 0
-
-            ! write(101,*)'num_norm',num_norm
-            num_face_vert = 0 ! initialise
-
-            do  ! reading through the lines in the crystal file...
-                read(10,"(a)",iostat=io)line
-                if (io/=0) exit
-                if (line(1:2) .eq. 'v ') then 
-                    read(line(2:), *) verts(j,1:3)  ! read all items
-                    j = j + 1
-                else if (line(1:2) .eq. 'vn') then
-                    read(line(3:), *) norms(m,1:3)  ! read all items
-                    ! print*,'norms(m,1:3)',norms(m,1:3)
-                    m = m + 1
-                else if (line(1:2) .eq. 'f ') then
-                    ! print*,'last 2 chars of line: "',line(len(line)-1:len(line)),'"'
-                    if (line(len(line)-1:len(line)) .ne. '  ') then
-                        print*,'Too many vertices in face: ',k,'. Please increase max_line_length'
-                        stop
-                    end if
-                    vertex_count = 0 ! number of vertices in this face starts at 0
-                    delim_count = 0 ! init delim counter
-                    do o = 2,len(trim(line)) ! for each character after the "f" character in this line
-                        if(line(o:o) .eq. ' ') then ! if its a space...
-                            if (delim_count == 2) then ! if the delim counter was 2
-                                ! print*,'found normal id: ',line(o-digits_to_read:o-1)
-                                ! if we're reading the first vertex, save the normal id
-                                read(line(o-digits_to_read:o-1),*) norm_ids(k) ! read the previous digits as the normal id
-                            end if
-                            delim_count = 0 ! set the delimiter counter to 0
-                            digits_to_read = 0 ! set the digits to read counter to 0
-                            vertex_count = vertex_count + 1 ! update the vertex counter
-                            ! print*,'updating vertex counter to: ',vertex_count
-                            if (vertex_count .gt. num_face_vert_max_in) then ! stop if there are too many vertices
-                                print*,'face',k,' has',vertex_count, &
-                                    ' vertices which is greater than the max value of',num_face_vert_max_in
-                                print*,'Please increase the max vertices per face "num_face_vert_max_in"'
-                                stop
-                            end if
-                        else if (line(o:o) .eq. '/') then ! if its a slash delimiter...
-                            if (delim_count == 0) then ! if the delim counter was 0
-                                ! print*,'found vertex id: ',line(o-digits_to_read:o-1)
-                                read(line(o-digits_to_read:o-1),*) face_ids_temp(k,vertex_count) ! read the previous digits as the vertex id
-                            end if
-                            ! if the delim counter was 1, do nothing (ignore material properties)
-                            delim_count = delim_count + 1 ! update delimiter counter
-                            ! print*,'updating delim counter to: ',delim_count 
-                            digits_to_read = 0 ! set the digits to read counter to 0
-                        else ! if its something useful...
-                            digits_to_read = digits_to_read + 1 ! update digits to read counter so we can read it later
-                            if(o == len(trim(line))) then ! if we are at the end of the line, there is no trailing space
-                                ! therefore, force read either vertex id or normal id, depending on the delim count
-                                ! print*,'end of line reached'
-                                if (delim_count == 0) then ! if the delim counter was 0, we need to read the previous digits as the vertex id
-                                    ! print*,'found vertex id: ',line(o+1-digits_to_read:o+1-1)
-                                    read(line(o+1-digits_to_read:o+1-1),*) face_ids_temp(k,vertex_count)
-                                else if (delim_count == 2) then ! if the delim counter was 2, we need to read the previous digits as the normal id
-                                    ! print*,'found normal id: ',line(o+1-digits_to_read:o+1-1)
-                                    ! but do nothing because we only use the normal from the first vertex
-                                end if
-                            end if
-                        end if
-                    end do
-                    num_face_vert(k) = vertex_count ! save the total number of vertices in this face
-                    k = k + 1 ! counts total number of faces
-                end if
-            end do
-            
-            close(10)
-
-            num_face_vert_max = maxval(num_face_vert) ! get max vertices in a face
-
-            allocate(face_ids(num_face,num_face_vert_max)) ! allocate an array for the vertex IDs in each face
-            face_ids = face_ids_temp(1:num_face,1:num_face_vert_max) ! truncate excess columns
-            
-            ! print*,'crystal geometry:'
-            ! print*,'number of unique vertices: ',num_vert
-            
-            ! print*,'number of unique faces: ',num_face
-            ! print*,'number of normals: ',num_norm
-            
-            ! !print*,'number of unique normals: ',num_norm
-            ! print*,'max vertices per face: ',num_face_vert_max
-
-            
-            ! ! print the number of vertices in each face
-            ! print*,'num_face_vert array:'
-            ! do i = 1, num_face 
-            !     print*,num_face_vert(i)
-            ! end do
-
-            ! ! print the normal IDs of each face
-            ! print*,'norm id array:'
-            ! do i = 1, num_face
-            !     print*,norm_ids(i)
-            ! end do
-
-                !! print the vertex IDs of each face
-                !print*,'face_ids array:'
-                !do i = 1,num_face 
-                !    print*,face_ids(i,1:num_face_vert(i))
-                !end do  
-
-            ! print*,'verts(face_ids(8,3),1:3) ',verts(face_ids(8,3),1:3) ! test (get the x,y,z components of the 3rd vertex in the 8th face)
-            ! print*,'norms(norm_ids(5),1:3) ',norms(norm_ids(5),1:3) ! test (get the x,y,z components of the 5th face)
-            
-            ! now compute the face midpoints
-            
-            !allocate(Midpoints(num_face,3))
-            !
-            !do i = 1, num_face ! for each face
-            !    !print*,'vertices for this face: '
-            !    !print*,'vertex IDs for this face: '
-            !    !print*,face_ids(i,1:num_face_vert(i))
-            !    !print*,'vertex coordinates for this face: '
-            !    !print*,verts(face_ids(i,1:num_face_vert(i)),1:3)
-            !    !print*,'midpoint: '
-            !    !print*,sum(verts(face_ids(i,1:num_face_vert(i)),1:3),1)/num_face_vert(i)
-            !    Midpoints(i,1:3) = sum(verts(face_ids(i,1:num_face_vert(i)),1:3),1)/num_face_vert(i)
-            !end do
-            
-            !do i = 1, num_face
-            !    print*,'Face ',i,' has midpoint: ',Midpoints(i,1:3)
-            !end do
-
-            if(num_norm == 0 .and. job_params%debug >= 1) then ! if no normals read, give warning
-                print*,'warning: no normals found in wavefront file.'
-                print*,'this code is therefore unable to check that vertices are correctly ordered.'
-                print*,'the user should ensure that the vertex ids in each face should be in an anti-clockwise order as viewed externally.'
-            else ! else, if some normals read, perform checks to see if vertices need reordering
-                ! if(job_params%debug >= 1) print*,'validating vertex ordering...'
-                ! call validate_vertices(verts,norms,face_ids,num_face_vert,norm_ids)
-            end if
-            ! stop
+            call read_wavefront(job_params%cfn,geometry)
 
         else if (trim(cft) .eq. 'mrt') then ! if macke ray-tracing style geometry file
 
@@ -2756,6 +2616,25 @@ subroutine PDAL2(   job_params,     &
             ! stop
 
             close(10)
+            ! now put everything into a data strucute (work in progress)
+            ! vertices
+            allocate(geometry%v(1:num_vert,1:3))
+            geometry%nv = num_vert
+            do i = 1, geometry%nv
+                geometry%v(i,:) = verts(i,:)
+            end do
+
+            ! faces
+            allocate(geometry%f(1:num_face))
+            geometry%nf = num_face
+            do i = 1, geometry%nf
+                allocate(geometry%f(i)%vi(1:num_face_vert(i)))
+                do j = 1, num_face_vert(i)
+                    geometry%f(i)%vi(j) = face_ids(i,j)
+                end do
+                geometry%f(i)%nv = num_face_vert(i)
+            end do
+
         else
             print*,'error: particle geometry file type "',trim(cft),'" is not supported.'
             stop
@@ -2763,57 +2642,25 @@ subroutine PDAL2(   job_params,     &
 
         if (auto_apertures .eqv. .true.) then
             ! print*,'number of faces:',size(face_ids,1)
-            if(size(face_ids,1) .gt. 50) print*,'warning: automatic aperture assignment for large numbers of input faces is not well supported.'
-            allocate(apertures(1:size(face_ids,1)))
-            do i = 1, size(face_ids,1)
-                apertures(i) = i
+            if(geometry%nf > 50) print*,'warning: automatic aperture assignment for large numbers of input faces is not well supported.'
+            do i = 1, geometry%nf
+                geometry%f(i)%ap = i
             end do
         else
-            call readApertures(afn, apertures, face_ids) ! read aperture assignments from file
+            ! call readApertures(afn, apertures, face_ids) ! read aperture assignments from file
+            call read_apertures(afn, geometry)
         end if
 
     else if(c_method(1:len(trim(c_method))) .eq. "cc_hex") then ! if particle is to be generated according to Chris Collier hex method
         write(101,*)'attempting to make cc crystal'
         seed = [0, 0, 0, 0, 0, 0, 0, 0] ! Set the seed values
         call RANDOM_SEED(put=seed) ! Set the seed for the random number generator
-        call CC_HEX_MAIN(cc_hex_params,face_ids,verts,apertures)
-        call PROT_CC(verts) ! align prism axis with z axis
-        num_vert = size(verts,1)
-        num_face = size(face_ids,1)
-        num_face_vert_max = 3
-        allocate(num_face_vert(num_face))
-        num_face_vert = 3
-        ! write(101,*)'back from cc_hex_main'
+        call CC_HEX_MAIN(cc_hex_params,geometry)
+        call PROT_CC(geometry%v) ! align prism axis with z axis
     else
         print*,'error: ',c_method(1:len(trim(c_method))),' is not a valid method of particle file input'
         stop
     end if
-
-    call midPointsAndAreas(face_ids, verts, Midpoints, faceAreas, num_face_vert) ! calculate particle facet areas (for doing some checks in the following sr)
-
-    ! call area_stats(faceAreas)
-
-    ! now put everything into a data strucute (work in progress)
-    ! vertices
-    allocate(geometry%v(1:num_vert,1:3))
-    geometry%nv = num_vert
-    do i = 1, geometry%nv
-        geometry%v(i,:) = verts(i,:)
-    end do
-
-    ! faces
-    allocate(geometry%f(1:num_face))
-    geometry%nf = num_face
-    do i = 1, geometry%nf
-        allocate(geometry%f(i)%vi(1:num_face_vert(i)))
-        do j = 1, num_face_vert(i)
-            geometry%f(i)%vi(j) = face_ids(i,j)
-        end do
-        geometry%f(i)%mid(:) = Midpoints(i,:)
-        geometry%f(i)%area = faceAreas(i)
-        geometry%f(i)%ap = apertures(i)
-        geometry%f(i)%nv = num_face_vert(i)
-    end do
 
     geometry%na = maxval(geometry%f(:)%ap) ! total number of apertures
     allocate(geometry%ap(1:geometry%na)) ! allocate
@@ -2831,22 +2678,202 @@ subroutine PDAL2(   job_params,     &
     call compute_geometry_apertures(geometry)
     call compute_geometry_edge_vectors(geometry)
 
-    ! write(101,*)'number of parents: ',geometry%na
-    ! write(101,*)'number of vertices: ',geometry%nv
-    ! write(101,*)'number of faces: ',geometry%nf
-    ! write(101,*)'number of normals: ',geometry%nn
-    ! write(101,*)'max vertices per face:',maxval(geometry%f(:)%nv)
-    ! write(101,*)'total surface area: ',geometry%area
-    ! write(101,*)'min facet area: ',minval(geometry%f(:)%area)
-    ! write(101,*)'max facet area: ',maxval(geometry%f(:)%area)
-    ! write(101,*)'centre of mass: ',geometry%com(:)
-    
+end subroutine
 
-    ! write(101,*)'======================================================'
-    ! write(101,*)'======================================================'
-    ! write(101,*)'======================================================'
+subroutine read_wavefront(cfn,geometry)
+
+    type(geometry_type), intent(out) :: geometry 
+    character(len=*), intent(in) :: cfn
+
+    character(:), allocatable :: line ! a line in a file
+    integer io, num_vert, num_norm, num_face, vi, ni, fi
+
+    num_vert = 0
+    num_norm = 0
+    num_face = 0
+    vi = 0
+    ni = 0
+    fi = 0
+
+    allocate(character(len=get_max_line_len(cfn)) :: line)
+
+    open(unit=10, file=cfn, status="old")
+
+    do ! scan lines
+        read(10,"(a)",iostat=io) line
+        if (io/=0) exit
+
+        line = adjustl(line) ! remove leading white space
+
+        if (line(1:2) == "v ") then
+            num_vert = num_vert + 1
+        else if (line(1:2) == "vn") then
+            num_norm = num_norm + 1
+        else if (line(1:2) == "f ") then
+            num_face = num_face + 1
+        end if
+
+        ! print*,"line=",trim(line)," iostat=",io
+
+    end do
+
+    print*,"num vertices: ",num_vert    
+    print*,"num normals: ",num_norm    
+    print*,"num faces: ",num_face    
+
+    allocate(geometry%v(1:num_vert,1:3))
+    allocate(geometry%n(1:num_face,1:3)) ! 1 normal per face
+    allocate(geometry%f(1:num_face))
+    geometry%nv = num_vert
+    geometry%nn = num_face
+    geometry%nf = num_face
+
+    rewind(10)
+
+    do ! scan lines
+        read(10,"(a)",iostat=io) line
+        if (io/=0) exit
+
+        line = adjustl(line) ! remove leading white space
+
+        if (line(1:2) == "v ") then ! read vertex
+            vi = vi + 1
+            geometry%v(vi,1:3) = read_wavefront_triplet(line)
+        else if (line(1:2) == "f ") then ! read face
+            fi = fi + 1
+            call read_wavefront_face(line,geometry%f(fi))
+        end if
+    end do
+
+    close(10)
+
+    print*,"finished reading geometry"
 
 end subroutine
+
+subroutine read_wavefront_face(line,f)
+
+    character(len=*), intent(in) :: line
+    type(facet_type), intent(out) :: f
+    integer iostat, i, nv, ii, start, end
+    character(1) char
+    logical ready
+
+    nv = 0
+
+    ! prescan - get number of vertices in face
+    do i = 2, len_trim(line) ! ignore f line-leading char
+        if (line(i:i) == ' ') then
+            ready = .TRUE. ! ready to read next vertex part
+            cycle
+        else 
+            if (ready) then
+                nv = nv + 1
+                ii = i ! mark start
+                ready = .FALSE.
+            end if
+        end if
+    end do
+
+    f%nv = nv
+    allocate(f%vi(nv))
+    nv = 0 ! reset vertex counter
+
+    ! read vertex
+    i = 1 ! skip over leading f
+    do 
+        i = i + 1
+        char = line(i:i)
+        if (char /= ' ') then
+            start = i
+            do 
+                i = i + 1
+                char = line(i:i)
+                if (char == ' ' .OR. i > len_trim(line)) then
+                    end = i - 1
+                    nv = nv + 1
+                    f%vi(nv) = rip_vertex_id_from_part(line(start:end))
+                    exit
+                end if
+            end do
+        end if
+        if (i > len_trim(line)) exit
+    end do
+
+end subroutine
+
+function rip_vertex_id_from_part(part) result(vertex_id)
+
+    character(len=*), intent(in) :: part
+    integer :: vertex_id
+    integer i
+
+    do i = 1, len(part)
+        if (part(i:i) == '/') then
+            exit
+        end if
+    end do
+
+    read(part(1:i-1),*) vertex_id
+
+end function
+
+function read_wavefront_triplet(line) result(vertex)
+
+    character(len=*), intent(in) :: line
+    real :: vertex(1:3)
+    integer io
+
+    read(line(3:), *,iostat=io) vertex(1:3)
+
+    if (io /= 0) then
+        print*,"Error reading line."
+        stop
+    end if
+
+    if (any(isnan(vertex(:)))) then
+        print*,"Detected NaN in line."
+        stop
+    end if
+
+end function
+
+integer function get_max_line_len(filename)
+
+    character(len=*), intent(in) :: filename
+    integer iostat, length, unit
+    character(1) char
+
+    unit = 10
+    get_max_line_len = 0
+    length = 0
+
+    open(unit=unit,file=filename,status="old",action="read",iostat=iostat)
+    if (iostat /= 0) then
+        print*,"Error opening file: '",trim(filename),"'"
+        stop
+    end if
+
+    do
+        read(unit,'(A1)',advance="no",iostat=iostat) char
+        if (length > get_max_line_len) then
+            get_max_line_len = length
+        end if
+        length = length + 1
+
+        if (iostat == -1) then ! end of file
+            exit
+        else if (iostat == -2) then ! end of line 
+            length = 0
+            continue
+        else if (iostat /= 0) then ! exit
+            exit
+        end if
+    end do 
+
+    close(unit)
+
+end function
 
 character(100) function read_string(ifn,var)
 

@@ -11,7 +11,7 @@ module cc_hex_mod
     
     ! ################ START MAIN #################
     
-    SUBROUTINE CC_HEX_MAIN(cc_hex_params,face_ids,vertices,apertures)
+    SUBROUTINE CC_HEX_MAIN(cc_hex_params,geometry)
         REAL(8) :: L, hradius, pflength
         INTEGER :: nfhr, nfpl, pfhfer, pfpfer, nscales
         REAL(8), DIMENSION(:), ALLOCATABLE :: clen, stdev
@@ -35,11 +35,12 @@ module cc_hex_mod
         INTEGER :: O1 ! HB 23/1/23 offset test
         
         ! HB integration with abt
-        integer(8), dimension(:), allocatable, intent(out) :: apertures ! taken as parents parent facets
-        real(8), dimension(:,:), allocatable, intent(out) :: vertices
-        integer(8), dimension(:,:), allocatable, intent(out) :: face_ids
+        integer(8), dimension(:), allocatable :: apertures ! taken as parents parent facets
+        real(8), dimension(:,:), allocatable :: vertices
+        integer(8), dimension(:,:), allocatable :: face_ids
         integer face_counter, vert_counter ! counter for tracking number of faces
-        integer k1
+        integer k1, i, j 
+        type(geometry_type), intent(out) :: geometry
         
         !read in input values
         ! OPEN(UNIT=3, FILE='vals.in', STATUS='OLD')
@@ -782,8 +783,24 @@ module cc_hex_mod
         END DO
         
         ! CLOSE(UNIT=3) 
-        
-        write(101,*)'total # faces: ',face_counter
+
+        geometry%nv = size(vertices,1)
+        geometry%nf = size(face_ids,1)
+        allocate(geometry%f(geometry%nf))
+        allocate(geometry%v(1:geometry%nv,1:3))
+
+        geometry%f(:)%nv = 3
+        do i = 1, geometry%nv
+            geometry%v(i,:) = vertices(i,:)
+        end do
+
+        do i = 1, geometry%nf
+            allocate(geometry%f(i)%vi(3))
+            do j = 1, 3
+                geometry%f(i)%vi(j) = face_ids(i,j)
+            end do
+            geometry%f(i)%ap = apertures(i)
+        end do 
         
         ! write(101,*) 'Output filename is:', TRIM(fn)
         
