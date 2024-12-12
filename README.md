@@ -1,5 +1,9 @@
 # PBT: Parent Beam Tracer Light Scattering Code
 
+## Foreword
+
+The authors hope that the users find this code useful and we kindly ask that you cite the source of this code. The general reference is - Ballington H. and Hesse E. A light scattering model for large particles with surface roughness, [J. Quant. Spectrosc. Radiat. Transfer **323**, 109054](https://doi.org/10.1016/j.jqsrt.2024.109054) (2024).
+
 ## Table of Contents
 
 - [PBT: Parent Beam Tracer Light Scattering Code](#pbt-parent-beam-tracer-light-scattering-code)
